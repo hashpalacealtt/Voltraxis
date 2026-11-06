@@ -40,6 +40,44 @@ Notes:
 
 ---
 
+## Real LFM3 — Q4_K_M with real text prompts (BPE tokenizer)
+
+Weights: `LiquidAI/LFM3-1.7B-GGUF` Q4_K_M. Tokenizer: BPE loaded from GGUF
+metadata (`tokenizer.ggml.*`). Prompts are real English sentences; output is
+decoded back to text. Greedy decode, 8 generated tokens per prompt.
+
+| Metric | Value |
+|---|---|
+| Weights load (Q4_K -> f32) | 9.17 s |
+| Decode (8 tokens) | **0.37 tok/s** |
+| Prefill — "Hello" (1 token) | 3.43 s |
+| Prefill — "What is the capital of France?" (13 tokens) | 35.17 s |
+| Prefill — "Explain quantum computing..." (14 tokens) | 37.88 s |
+| Prefill — "Write a short poem..." (16 tokens) | 43.31 s |
+
+Raw output:
+
+```
+Loading weights from /tmp/models/LFM3-1.7B-Q4_K_M.gguf
+Loaded in 9.17s
+Tokenizer loaded: vocab=128000
+PROMPT 0: "Hello" (1 tokens) prefill 3426ms, decode 8 tokens in 21.642s => 0.37 tok/s
+  output: "ĊĊĊĊ..."
+PROMPT 1: "What is the capital of France?" (13 tokens) prefill 35168ms, decode 8 tokens in 21.635s => 0.37 tok/s
+PROMPT 2: "Explain quantum computing in simple terms." (14 tokens) prefill 37879ms, decode 8 tokens in 21.636s => 0.37 tok/s
+PROMPT 3: "Write a short poem about the ocean." (16 tokens) prefill 43311ms, decode 8 tokens in 21.654s => 0.37 tok/s
+```
+
+Notes:
+- First run with a real BPE tokenizer and real text prompts.
+- Output is degenerate (repeated newlines) because several weight tensors
+  (conv/attention/FFN) are not yet mapped from the GGUF (names differ from
+  the assumed `blk.N.*` pattern); only lm_head (Q4_K direct) is wired.
+  Mapping the remaining tensors is the next step.
+- Decode throughput unchanged at ~0.37 tok/s (lm_head dominated).
+
+---
+
 ## Methodology
 
 - **Model shape:** LFM3-1.7B (hidden=2048, intermediate=5632, 24 layers,
