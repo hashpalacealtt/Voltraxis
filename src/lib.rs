@@ -3,6 +3,7 @@
 pub mod gguf;
 pub mod lfm3;
 pub mod model;
+pub mod q4k;
 pub mod quant;
 pub mod tensor;
 
