@@ -7,39 +7,49 @@ const INTER: usize = 5632;
 const LAYERS: usize = 24;
 const VOCAB: usize = 65536;
 const N_DECODE: usize = 4;
+const TILE_T: usize = 64;
 
 use rayon::prelude::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-#[cfg(target_arch = "x86_64")]
-#[target_feature(enable = "avx2")]
 unsafe fn row_matmul_avx2(row: &mut [f32], a_row: &[f32], b: &[f32], k: usize, n: usize) {
-    for t in 0..k {
-        let ait = a_row[t];
-        let va = _mm256_set1_ps(ait);
-        let b_row = &b[t * n..];
-        let mut j = 0usize;
-        while j + 8 <= n {
-            let vb = _mm256_loadu_ps(b_row.as_ptr().add(j));
-            let vo = _mm256_loadu_ps(row.as_ptr().add(j));
-            let vr = _mm256_add_ps(vo, _mm256_mul_ps(va, vb));
-            _mm256_storeu_ps(row.as_mut_ptr().add(j), vr);
-            j += 8;
+    // Tiled over t: keep `row` hot in L1 across a block of t.
+    let mut tj = 0usize;
+    while tj < k {
+        let tj_end = (tj + TILE_T).min(k);
+        for t in tj..tj_end {
+            let ait = a_row[t];
+            let va = _mm256_set1_ps(ait);
+            let b_row = &b[t * n..];
+            let mut j = 0usize;
+            while j + 8 <= n {
+                let vb = _mm256_loadu_ps(b_row.as_ptr().add(j));
+                let vo = _mm256_loadu_ps(row.as_ptr().add(j));
+                let vr = _mm256_add_ps(vo, _mm256_mul_ps(va, vb));
+                _mm256_storeu_ps(row.as_mut_ptr().add(j), vr);
+                j += 8;
+            }
+            for jj in j..n {
+                row[jj] += ait * b_row[jj];
+            }
         }
-        for jj in j..n {
-            row[jj] += ait * b_row[jj];
-        }
+        tj = tj_end;
     }
 }
 
 fn row_matmul_scalar(row: &mut [f32], a_row: &[f32], b: &[f32], k: usize, n: usize) {
-    for t in 0..k {
-        let ait = a_row[t];
-        let b_row = &b[t * n..];
-        for j in 0..n {
-            row[j] += ait * b_row[j];
+    let mut tj = 0usize;
+    while tj < k {
+        let tj_end = (tj + TILE_T).min(k);
+        for t in tj..tj_end {
+            let ait = a_row[t];
+            let b_row = &b[t * n..];
+            for j in 0..n {
+                row[j] += ait * b_row[j];
+            }
         }
+        tj = tj_end;
     }
 }
 
