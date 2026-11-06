@@ -1,8 +1,44 @@
 # Voltraxis — Token/sec Data
 
 This document tracks the measured throughput (tokens/sec) of the Voltraxis
-engine running an LFM3-1.7B-shaped workload. It is updated as the engine
-evolves.
+engine running real LFM3-1.7B (Q4_K_M). Synthetic (LFM3-shaped) runs are
+also kept for reference. It is updated as the engine evolves.
+
+## Real LFM3 — Q4_K_M (measured on GitHub Actions, ubuntu-latest)
+
+Weights: `LiquidAI/LFM3-1.7B-GGUF` Q4_K_M (~1.05 GB), loaded via the GGUF
+parser + Q4_K dequantizer. Architecture: 24 tri-hybrid layers (13 gated
+short conv, 5 SWA, 6 global attention), vocab 128K. Greedy decode (argmax),
+8 generated tokens per prompt, prompts = fixed token-id sequences of
+varying length (no tokenizer yet).
+
+| Metric | Value |
+|---|---|
+| Weights load (Q4_K -> f32) | 7.55 s |
+| Decode (8 tokens) | **0.41 - 0.42 tok/s** |
+| Prefill — prompt len 1 | 3.15 s (3147 ms) |
+| Prefill — prompt len 4 | 9.63 s (9630 ms) |
+| Prefill — prompt len 8 | 19.28 s (19280 ms) |
+| Prefill — prompt len 16 | 38.52 s (38516 ms) |
+
+Raw output (from CI artifact `lfm3-bench-output`):
+
+```
+Loading weights from /tmp/models/LFM3-1.7B-Q4_K_M.gguf
+Loaded in 7.55s
+PROMPT 0 (len 1): prefill 3147ms, decode 8 tokens in 19.313s => 0.41 tok/s
+PROMPT 1 (len 4): prefill 9630ms, decode 8 tokens in 19.265s => 0.42 tok/s
+PROMPT 2 (len 8): prefill 19280ms, decode 8 tokens in 19.282s => 0.41 tok/s
+PROMPT 3 (len 16): prefill 38516ms, decode 8 tokens in 19.285s => 0.41 tok/s
+```
+
+Notes:
+- This is the **first real LFM3 measurement** (not synthetic).
+- Prefill scales linearly with prompt length (single-token-at-a-time path).
+- Decode is dominated by the `lm_head` (2048 x 128000) and Q4_K dequantization.
+- Next: batched prefill, KV cache reuse, inlined dequant, SIMD on the real path.
+
+---
 
 ## Methodology
 
@@ -19,7 +55,7 @@ evolves.
 
 ## Results
 
-### Run 1 — 2026-11-06 (initial baseline)
+### Synthetic Run 1 — 2026-11-06 (initial baseline, NOT real LFM3)
 
 | Metric | Value |
 |---|---|
@@ -44,7 +80,7 @@ PREFILL (prompt len 32): 32 tokens in 40.857s => 0.78 tok/s
 RESULT decode_tok_s=0.79
 ```
 
-### Run 2 — 2026-11-06 (AVX2 SIMD)
+### Synthetic Run 2 — 2026-11-06 (AVX2 SIMD, NOT real LFM3)
 
 Optimization: AVX2 intrinsics (`_mm256_*`) in the matmul hot loop, rayon
 parallelism over rows. ~3.5x speedup over the scalar baseline.
@@ -79,7 +115,7 @@ RESULT decode_tok_s=2.75
 | Run 1 — scalar naive | 0.79 | 1.0x |
 | Run 2 — AVX2 SIMD | 2.75 | 3.5x |
 
-### Run 3 — 2026-11-06 (AVX2 + tiling over t, TILE_T=64)
+### Synthetic Run 3 — 2026-11-06 (AVX2 + tiling, NOT real LFM3)
 
 Optimization: tiling of the `t` (k) loop in blocks of 64 to keep `row`
 hot in L1. No measurable gain — the per-row working set (row = 8 KB)
