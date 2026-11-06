@@ -49,6 +49,10 @@ References:
 - Hugging Face: https://huggingface.co/LiquidAI/LFM3-1.7B-MLX-4bit
 - Docs: https://docs.liquid.ai/lfm/models/lfm3-1.7b
 
+## 📊 Performance
+
+See [DATA.md](./DATA.md) for measured tokens/sec benchmarks.
+
 ## 🚧 Status
 
 **In development.** This README is evolving — sections will be filled in as

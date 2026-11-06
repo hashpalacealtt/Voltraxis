@@ -13,6 +13,11 @@ path = "src/lib.rs"
 name = "voltraxis"
 path = "src/main.rs"
 
+[[bin]]
+name = "bench"
+path = "src/bin/bench.rs"
+
 [dependencies]
+rayon = "1.12"
 
 [dev-dependencies]
