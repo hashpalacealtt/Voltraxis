@@ -1,0 +1,63 @@
+VOLTRAXIS LICENSE
+Version 1.0
+
+Copyright (c) 2026 Voltraxis Contributors. All rights reserved.
+
+This license governs the use of the Voltraxis software and associated
+documentation files (the "Software").
+
+1. Grant of License
+   Subject to the terms of this license, you are granted a limited,
+   non-exclusive, non-transferable, revocable license to use the Software
+   for personal, non-commercial purposes only.
+
+2. Right to Use
+   You may install and run the Software on devices you own or control,
+   for your own personal use, provided you do not violate any other term.
+
+3. No Modification (except by contribution)
+   You may not modify, adapt, translate, port, or create derivative works
+   of the Software in any form. The only permitted way to change the
+   Software is by submitting a contribution (pull request) to the
+   official Voltraxis repository, which may be reviewed and accepted or
+   rejected at the sole discretion of the Licensor. Any modification
+   outside of this contribution workflow is strictly prohibited.
+
+4. No Commercial Use
+   You may not use the Software, in whole or in part, for any commercial
+   purpose. This includes, but is not limited to, selling, sublicensing,
+   renting, leasing, offering as a service, or using the Software in any
+   product, service, or activity that generates revenue or commercial
+   advantage, directly or indirectly.
+
+5. No Redistribution
+   You may not redistribute, publish, share, or make the Software
+   available to any third party, in source or binary form, except as
+   part of an accepted contribution to the official repository.
+
+6. No Reverse Engineering
+   You may not reverse engineer, decompile, disassemble, or otherwise
+   attempt to derive the source code of the Software, except where
+   expressly permitted by applicable law.
+
+7. Termination
+   This license terminates automatically, without notice, if you fail to
+   comply with any of its terms. Upon termination, you must cease all
+   use of the Software and destroy all copies in your possession.
+
+8. No Warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+   NONINFRINGEMENT. IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY
+   CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+   TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+9. Governing Law
+   This license shall be governed by and construed in accordance with
+   the laws of the jurisdiction of the Licensor, without regard to its
+   conflict of law provisions.
+
+By using the Software, you agree to be bound by the terms of this
+license.
