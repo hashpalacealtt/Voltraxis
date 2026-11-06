@@ -9,15 +9,56 @@ const VOCAB: usize = 65536;
 const N_DECODE: usize = 4;
 
 use rayon::prelude::*;
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn row_matmul_avx2(row: &mut [f32], a_row: &[f32], b: &[f32], k: usize, n: usize) {
+    for t in 0..k {
+        let ait = a_row[t];
+        let va = _mm256_set1_ps(ait);
+        let b_row = &b[t * n..];
+        let mut j = 0usize;
+        while j + 8 <= n {
+            let vb = _mm256_loadu_ps(b_row.as_ptr().add(j));
+            let vo = _mm256_loadu_ps(row.as_ptr().add(j));
+            let vr = _mm256_add_ps(vo, _mm256_mul_ps(va, vb));
+            _mm256_storeu_ps(row.as_mut_ptr().add(j), vr);
+            j += 8;
+        }
+        for jj in j..n {
+            row[jj] += ait * b_row[jj];
+        }
+    }
+}
+
+fn row_matmul_scalar(row: &mut [f32], a_row: &[f32], b: &[f32], k: usize, n: usize) {
+    for t in 0..k {
+        let ait = a_row[t];
+        let b_row = &b[t * n..];
+        for j in 0..n {
+            row[j] += ait * b_row[j];
+        }
+    }
+}
 
 fn matmul(out: &mut [f32], a: &[f32], b: &[f32], _m: usize, k: usize, n: usize) {
     out.fill(0.0);
+    #[cfg(target_arch = "x86_64")]
+    let use_avx2 = std::arch::is_x86_feature_detected!("avx2");
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_avx2 = false;
+
     out.par_chunks_mut(n).enumerate().for_each(|(i, row)| {
-        for t in 0..k {
-            let ait = a[i * k + t];
-            for j in 0..n {
-                row[j] += ait * b[t * n + j];
+        let a_row = &a[i * k..(i + 1) * k];
+        if use_avx2 {
+            #[cfg(target_arch = "x86_64")]
+            unsafe {
+                row_matmul_avx2(row, a_row, b, k, n);
             }
+        } else {
+            row_matmul_scalar(row, a_row, b, k, n);
         }
     });
 }
