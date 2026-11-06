@@ -1,8 +1,9 @@
-//! Real LFM3 benchmark: load GGUF weights, generate tokens, measure tok/s.
+//! Real LFM3 benchmark: load GGUF weights + tokenizer, generate, measure tok/s.
 
 use std::env;
 use std::time::Instant;
 use voltraxis::lfm3::{self, KvCache};
+use voltraxis::tokenizer::Tokenizer;
 
 fn argmax(v: &[f32]) -> u32 {
     let mut best = 0usize;
@@ -32,43 +33,55 @@ fn main() {
     };
     println!("Loaded in {:.2}s", t0.elapsed().as_secs_f64());
 
-    // Prompts as token-id sequences (no tokenizer yet)
-    let prompts: &[&[u32]] = &[
-        &[1u32],
-        &[1, 2, 3, 4],
-        &[1, 2, 3, 4, 5, 6, 7, 8],
-        &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+    let tok = match voltraxis::gguf::parse(&path)
+        .ok()
+        .and_then(|g| Tokenizer::from_gguf(&g))
+    {
+        Some(t) => t,
+        None => {
+            println!("No tokenizer found, using token-id prompts");
+            return;
+        }
+    };
+    println!("Tokenizer loaded: vocab={}", tok.vocab.len());
+
+    let prompts = [
+        "Hello",
+        "What is the capital of France?",
+        "Explain quantum computing in simple terms.",
+        "Write a short poem about the ocean.",
     ];
     let n_gen = 8usize;
 
     for (pi, prompt) in prompts.iter().enumerate() {
+        let ids = tok.encode(prompt);
         let mut kv = KvCache::new();
-        // prefill
         let tp = Instant::now();
-        let mut last_logits = Vec::new();
-        for (pos, &tok) in prompt.iter().enumerate() {
-            last_logits = model.forward_one(tok, pos, &mut kv);
-        }
+        let last_logits = model.prefill(&ids, &mut kv);
         let prefill_ms = tp.elapsed().as_millis();
 
-        // decode
         let td = Instant::now();
         let mut cur = argmax(&last_logits);
+        let mut out_ids = vec![cur];
         for step in 0..n_gen {
-            let logits = model.forward_one(cur, prompt.len() + step, &mut kv);
+            let logits = model.forward_one(cur, ids.len() + step, &mut kv);
             cur = argmax(&logits);
+            out_ids.push(cur);
         }
         let dec_elapsed = td.elapsed().as_secs_f64();
         let dec_toks = n_gen as f64 / dec_elapsed;
+        let text = tok.decode(&out_ids);
 
         println!(
-            "PROMPT {} (len {}): prefill {}ms, decode {} tokens in {:.3}s => {:.2} tok/s",
+            "PROMPT {}: {:?} ({} tokens) prefill {}ms, decode {} tokens in {:.3}s => {:.2} tok/s",
             pi,
-            prompt.len(),
+            prompt,
+            ids.len(),
             prefill_ms,
             n_gen,
             dec_elapsed,
             dec_toks
         );
+        println!("  output: {:?}", text);
     }
 }

@@ -97,3 +97,30 @@ mod tests {
         assert_eq!(f16_to_f32(0x0000), 0.0);
     }
 }
+
+/// Q4_K direct matmul: out[m,n] += a[m,k] @ W_q4k, where W is stored as
+/// Q4_K super-blocks along the n dimension (256 values per block).
+/// Dequantization happens inline per super-block (no full dequant pass).
+pub fn matmul_q4k_f32(out: &mut [f32], q4k: &[u8], a: &[f32], _m: usize, k: usize, n: usize) {
+    out.fill(0.0);
+    let nblocks_per_row = (n + 255) / 256;
+    use rayon::prelude::*;
+    out.par_chunks_mut(n).enumerate().for_each(|(i, row_out)| {
+        for t in 0..k {
+            let ait = a[i * k + t];
+            for sb in 0..nblocks_per_row {
+                let off = (t * nblocks_per_row + sb) * 144;
+                if off + 144 > q4k.len() {
+                    continue;
+                }
+                let base_j = sb * 256;
+                let rem = (n - base_j).min(256);
+                let mut tmp = [0.0f32; 256];
+                dequant_super_block(&q4k[off..off + 144], &mut tmp);
+                for j in 0..rem {
+                    row_out[base_j + j] += ait * tmp[j];
+                }
+            }
+        }
+    });
+}

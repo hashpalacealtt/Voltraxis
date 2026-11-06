@@ -172,8 +172,10 @@ impl LayerWeights {
 
 pub struct Lfm3Model {
     pub layers: Vec<LayerWeights>,
-    pub embedding: Vec<f32>, // [VOCAB, HIDDEN]
-    pub lm_head: Vec<f32>,   // [HIDDEN, VOCAB]
+    pub embedding: Vec<f32>,  // [VOCAB, HIDDEN]
+    pub lm_head: Vec<f32>,    // [HIDDEN, VOCAB] (f32 path)
+    pub lm_head_q4k: Vec<u8>, // raw Q4_K bytes (Q4_K path)
+    pub lm_head_is_q4k: bool,
     pub final_norm: Vec<f32>,
 }
 
@@ -188,6 +190,8 @@ impl Lfm3Model {
             layers,
             embedding: vec![0.0; VOCAB * HIDDEN],
             lm_head: vec![0.0; HIDDEN * VOCAB],
+            lm_head_q4k: Vec::new(),
+            lm_head_is_q4k: false,
             final_norm: vec![1.0; HIDDEN],
         }
     }
@@ -284,8 +288,24 @@ impl Lfm3Model {
         rmsnorm(&mut x, &self.final_norm);
         // lm head
         let mut logits = vec![0.0; VOCAB];
-        matmul(&mut logits, &x, &self.lm_head, 1, HIDDEN, VOCAB);
+        if self.lm_head_is_q4k && !self.lm_head_q4k.is_empty() {
+            crate::q4k::matmul_q4k_f32(&mut logits, &self.lm_head_q4k, &x, 1, HIDDEN, VOCAB);
+        } else {
+            matmul(&mut logits, &x, &self.lm_head, 1, HIDDEN, VOCAB);
+        }
         logits
+    }
+}
+
+impl Lfm3Model {
+    /// Prefill: process a slice of tokens, return last logits.
+    /// (Currently sequential per-token; true batched matmul is a future opt.)
+    pub fn prefill(&mut self, tokens: &[u32], kv: &mut KvCache) -> Vec<f32> {
+        let mut last = Vec::new();
+        for (pos, &t) in tokens.iter().enumerate() {
+            last = self.forward_one(t, pos, kv);
+        }
+        last
     }
 }
 
@@ -400,21 +420,31 @@ pub fn load_from_gguf(path: &str) -> Result<Lfm3Model, String> {
             m.final_norm = v;
         }
     }
-    // lm head
-    if let Some(v) = find_tensor(
-        &tensors,
-        &["output.weight", "lm_head.weight", "model.lm_head.weight"],
-    ) {
-        if v.len() == m.lm_head.len() {
-            m.lm_head = v;
-        }
-    } else if let Some(v) = find_tensor(&tensors, &["token_embd.weight"]) {
-        // tied embeddings
-        if v.len() == m.lm_head.len() {
-            m.lm_head = v;
+    // lm head: prefer keeping Q4_K raw bytes for direct matmul
+    let lm_candidates = ["output.weight", "lm_head.weight", "model.lm_head.weight"];
+    let mut loaded_q4k = false;
+    for name in &lm_candidates {
+        if let Some(t) = g.tensors.iter().find(|t| t.name == *name) {
+            if t.dtype == 12 {
+                let raw = crate::gguf::tensor_bytes(&g, t);
+                m.lm_head_q4k = raw.to_vec();
+                m.lm_head_is_q4k = true;
+                loaded_q4k = true;
+                break;
+            }
         }
     }
-
+    if !loaded_q4k {
+        if let Some(v) = find_tensor(&tensors, &lm_candidates) {
+            if v.len() == m.lm_head.len() {
+                m.lm_head = v;
+            }
+        } else if let Some(v) = find_tensor(&tensors, &["token_embd.weight"]) {
+            if v.len() == m.lm_head.len() {
+                m.lm_head = v;
+            }
+        }
+    }
     let kinds = layer_kinds();
     for (i, layer) in m.layers.iter_mut().enumerate() {
         layer.kind = kinds[i];
