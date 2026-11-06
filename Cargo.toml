@@ -1,0 +1,18 @@
+[package]
+name = "voltraxis"
+version = "0.1.0"
+edition = "2021"
+description = "AI engine for running LFM3 at shocking speed, 4-bit, unaltered"
+license = "LicenseRef-Voltraxis"
+
+[lib]
+name = "voltraxis"
+path = "src/lib.rs"
+
+[[bin]]
+name = "voltraxis"
+path = "src/main.rs"
+
+[dependencies]
+
+[dev-dependencies]
