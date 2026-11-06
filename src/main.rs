@@ -1,4 +1,4 @@
-use voltraxis::{Lfm3Config, quant};
+use voltraxis::{quant, Lfm3Config};
 
 fn main() {
     let cfg = Lfm3Config::lfm3_1_7b();
