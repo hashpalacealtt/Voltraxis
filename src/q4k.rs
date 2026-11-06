@@ -48,7 +48,7 @@ pub fn dequant_super_block(sb: &[u8], out: &mut [f32]) {
     }
 }
 
-fn f16_to_f32(h: u16) -> f32 {
+pub fn f16_to_f32(h: u16) -> f32 {
     // IEEE 754 half -> single
     let sign = (h >> 15) as u32;
     let exp = (h >> 10) & 0x1F;

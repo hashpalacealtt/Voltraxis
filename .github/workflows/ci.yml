@@ -35,8 +35,8 @@ jobs:
         run: cargo clippy -- -D warnings
         continue-on-error: true
 
-  bench:
-    name: Benchmark (ubuntu-latest)
+  bench-synthetic:
+    name: Synthetic benchmark (ubuntu-latest)
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -49,11 +49,45 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Run benchmark
+      - name: Run synthetic benchmark
         run: cargo run --release --bin bench | tee bench_output.txt
 
-      - name: Upload benchmark output
+      - name: Upload synthetic benchmark output
         uses: actions/upload-artifact@v4
         with:
-          name: bench-output
+          name: bench-synthetic-output
           path: bench_output.txt
+
+  lfm3-real-bench:
+    name: Real LFM3 benchmark (ubuntu-latest)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Download LFM3-1.7B-Q4_K_M weights
+        run: |
+          mkdir -p /tmp/models
+          curl -L --retry 3 -o /tmp/models/LFM3-1.7B-Q4_K_M.gguf \
+            "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf"
+          ls -lh /tmp/models/
+
+      - name: Inspect GGUF
+        run: cargo run --release --bin ggufinfo -- /tmp/models/LFM3-1.7B-Q4_K_M.gguf | head -60
+
+      - name: Run real LFM3 benchmark
+        run: cargo run --release --bin lfm3bench -- /tmp/models/LFM3-1.7B-Q4_K_M.gguf | tee lfm3_bench_output.txt
+
+      - name: Upload real LFM3 benchmark output
+        uses: actions/upload-artifact@v4
+        with:
+          name: lfm3-bench-output
+          path: lfm3_bench_output.txt

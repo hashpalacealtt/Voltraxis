@@ -354,3 +354,163 @@ mod tests {
         assert_eq!(logits.len(), VOCAB);
     }
 }
+
+// ---------- GGUF loading ----------
+
+use std::collections::HashMap;
+
+fn find_tensor(tensors: &HashMap<String, Vec<f32>>, candidates: &[&str]) -> Option<Vec<f32>> {
+    for c in candidates {
+        if let Some(v) = tensors.get(*c) {
+            return Some(v.clone());
+        }
+    }
+    None
+}
+
+pub fn load_from_gguf(path: &str) -> Result<Lfm3Model, String> {
+    let g = crate::gguf::parse(path).map_err(|e| e)?;
+    // dequant all tensors into a map
+    let mut tensors: HashMap<String, Vec<f32>> = HashMap::new();
+    for t in &g.tensors {
+        let v = crate::gguf::dequant_tensor(&g, t);
+        tensors.insert(t.name.clone(), v);
+    }
+
+    let mut m = Lfm3Model::new_random();
+    // embedding
+    if let Some(v) = find_tensor(
+        &tensors,
+        &[
+            "token_embd.weight",
+            "model.embed_tokens.weight",
+            "embeddings.weight",
+        ],
+    ) {
+        if v.len() == m.embedding.len() {
+            m.embedding = v;
+        }
+    }
+    // final norm
+    if let Some(v) = find_tensor(
+        &tensors,
+        &["output_norm.weight", "model.norm.weight", "norm.weight"],
+    ) {
+        if v.len() == m.final_norm.len() {
+            m.final_norm = v;
+        }
+    }
+    // lm head
+    if let Some(v) = find_tensor(
+        &tensors,
+        &["output.weight", "lm_head.weight", "model.lm_head.weight"],
+    ) {
+        if v.len() == m.lm_head.len() {
+            m.lm_head = v;
+        }
+    } else if let Some(v) = find_tensor(&tensors, &["token_embd.weight"]) {
+        // tied embeddings
+        if v.len() == m.lm_head.len() {
+            m.lm_head = v;
+        }
+    }
+
+    let kinds = layer_kinds();
+    for (i, layer) in m.layers.iter_mut().enumerate() {
+        layer.kind = kinds[i];
+        let prefix = format!("blk.{}", i);
+        // norms
+        if let Some(v) = find_tensor(
+            &tensors,
+            &[
+                &format!("{}.attn_norm.weight", prefix),
+                &format!("{}.input_layernorm.weight", prefix),
+            ],
+        ) {
+            if v.len() == layer.norm1.len() {
+                layer.norm1 = v;
+            }
+        }
+        if let Some(v) = find_tensor(
+            &tensors,
+            &[
+                &format!("{}.ffn_norm.weight", prefix),
+                &format!("{}.post_attention_layernorm.weight", prefix),
+            ],
+        ) {
+            if v.len() == layer.norm2.len() {
+                layer.norm2 = v;
+            }
+        }
+        // attention
+        for (field, cands) in [
+            (
+                &mut layer.wq,
+                [
+                    format!("{}.attn_q.weight", prefix),
+                    format!("{}.self_attn.q_proj.weight", prefix),
+                ],
+            ),
+            (
+                &mut layer.wk,
+                [
+                    format!("{}.attn_k.weight", prefix),
+                    format!("{}.self_attn.k_proj.weight", prefix),
+                ],
+            ),
+            (
+                &mut layer.wv,
+                [
+                    format!("{}.attn_v.weight", prefix),
+                    format!("{}.self_attn.v_proj.weight", prefix),
+                ],
+            ),
+            (
+                &mut layer.wo,
+                [
+                    format!("{}.attn_output.weight", prefix),
+                    format!("{}.self_attn.o_proj.weight", prefix),
+                ],
+            ),
+        ] {
+            let c: Vec<&str> = cands.iter().map(|s| s.as_str()).collect();
+            if let Some(v) = find_tensor(&tensors, &c) {
+                if v.len() == field.len() {
+                    *field = v;
+                }
+            }
+        }
+        // ffn
+        for (field, cands) in [
+            (
+                &mut layer.w_gate,
+                [
+                    format!("{}.ffn_gate.weight", prefix),
+                    format!("{}.mlp.gate_proj.weight", prefix),
+                ],
+            ),
+            (
+                &mut layer.w_up,
+                [
+                    format!("{}.ffn_up.weight", prefix),
+                    format!("{}.mlp.up_proj.weight", prefix),
+                ],
+            ),
+            (
+                &mut layer.w_down,
+                [
+                    format!("{}.ffn_down.weight", prefix),
+                    format!("{}.mlp.down_proj.weight", prefix),
+                ],
+            ),
+        ] {
+            let c: Vec<&str> = cands.iter().map(|s| s.as_str()).collect();
+            if let Some(v) = find_tensor(&tensors, &c) {
+                if v.len() == field.len() {
+                    *field = v;
+                }
+            }
+        }
+    }
+    Ok(m)
+}

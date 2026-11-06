@@ -21,6 +21,10 @@ path = "src/bin/bench.rs"
 name = "ggufinfo"
 path = "src/bin/ggufinfo.rs"
 
+[[bin]]
+name = "lfm3bench"
+path = "src/bin/lfm3bench.rs"
+
 [dependencies]
 rayon = "1.12"
 
